@@ -591,26 +591,11 @@ components:
       type: object
       required:
         - deviceId
-        - racmSessionId
       properties:
         deviceId:
           type: string
           example: 1qazxsw23edc
           description: The device-id of the client in UUID format.
-        sessionId:
-          type: string
-          example: 0AEE1B58BAEEDA3EABA42B32EBB3DFE07E9CFF402EAF9EED8EFAAF209EE52FD0BECC5B7CDE645F50DE7D
-          description: |-
-            The VVOIP session ID created by WebRTC Gateway.
-            The sessionID will identify a unique session between the WebRTC
-            Gateway and the device client.
-            It will be included on the events generated.
-        racmSessionId:
-          type: string
-          example: xsmcaum3z4zw4l0cu4w115m0
-          description: |-
-            The RACM session ID created by WebRTC Gateway.
-            Obtained via RACM API.
 
     SubscriptionEventTypeNotification:
       type: string
