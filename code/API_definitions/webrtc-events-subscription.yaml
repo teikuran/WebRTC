@@ -9,8 +9,7 @@ info:
     (incoming calls).
 
     Any device can subscribe to media session events for accessible active media sessions using the
-    `sessionId` to identify the media session to track. Using a valid
-    `registrationId` it can subscribe to new media sessions events (new calls).
+    `sessionId` to identify the media session to track. 
     This allows the device applications to update the UI while media sessions
     are progressing and also, allows the device to receive new session request,
     generating incoming call scenarios for non-SIM devices.
@@ -67,13 +66,13 @@ info:
 
     - `org.camaraproject.webrtc-events.v0.session-status`
 
-      - Events triggered for any media session related event (e.g. far end new
-        media endpoints)
+      - Events triggered for any state changes related to the specific media session 
+        identified by the provided mediaSessionId
 
-    - `org.camaraproject.webrtc-events.v0.session-invitation`
+    - `org.camaraproject.webrtc-events.v0.call-events`
 
       - Events triggered when a new session is requested (e.g. incoming call
-        received)
+        received, media session related)
 
     Note: Additionally to these list, ``org.camaraproject.webrtc-events.v0.subscription-ends``
     notification `type` is sent when the subscription ends.
@@ -93,8 +92,8 @@ info:
 
     Find more information at the Schema description.
 
-    A `org.camaraproject.webrtc-events.v0.session-status` event includes
-    session information updates. With the same schema that is used with the
+    A `org.camaraproject.webrtc-events.v0.session-status` event provides updates related to the 
+    session identified by the specified mediaSessionId. With the same schema that is used with the
     WebRTC Call Handling API, when retrieving information from the
     `GET /webrtc-call-handling/session/{mediaSessionId}` endpoint.
 
@@ -119,7 +118,7 @@ info:
 
     Find more information at the Schema description.
 
-    A `org.camaraproject.webrtc-events.v0.session-invitation` event
+    A `org.camaraproject.webrtc-events.v0.call-events` event
     includes information about new requested sessions (incoming calls), it
     requires a valid registration on the network.
 
@@ -195,12 +194,10 @@ paths:
       description: |-
         Create a webrtc-events event subscription. For the corresponding type:
 
-        - `org.camaraproject.webrtc-events.v0.session-invitation`: new calls event
-        - `org.camaraproject.webrtc-events.v0.session-status`: updates on specific call
+        - `org.camaraproject.webrtc-events.v0.call-events`: new calls event
 
         To subscribe and receive notifications about new calls, a
-        `session-invitation` subscription is required using the `registrationId`
-        obtained from webrtc-registration API.
+        `call-events` subscription is required.
 
         Once you create a new media session or receive an
         new call event, you can subscribe to `session-status` to receive
@@ -211,8 +208,7 @@ paths:
         - $ref: "#/components/parameters/x-correlator"
       security:
         - openId:
-            - webrtc-events:org.camaraproject.webrtc-events.v0.session-status:create
-            - webrtc-events:org.camaraproject.webrtc-events.v0.session-invitation:create
+            - webrtc-events:org.camaraproject.webrtc-events.v0.call-events:create
       requestBody:
         content:
           application/json:
@@ -333,6 +329,106 @@ paths:
           $ref: "#/components/responses/Generic401"
         "403":
           $ref: "#/components/responses/Generic403"
+  /subscriptions/sessions/{mediaSessionId}:
+    post:
+      tags:
+        - An Webrtc-event Subscription
+      summary: "Create a webrtc-events event subscription for the mediaSessionId"
+      description: |-
+        Create a webrtc-events event subscription. For the corresponding type:
+
+        - `org.camaraproject.webrtc-events.v0.session-status`: monitoring the status of a session status 
+          identified by the provided mediaSessionId
+
+        Once you create a new media session or receive an
+        new call event, you can subscribe to `session-status` to receive
+        updates about the media session in progress using the
+        `mediaSessionId` unique identifier.
+      operationId: createNotificationChannelSubscription
+      parameters:
+        - $ref: "#/components/parameters/x-correlator"
+      security:
+        - openId:
+            - webrtc-events:org.camaraproject.webrtc-events.v0.session-status:create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionSpecificSubscriptionRequest"
+        required: true
+      callbacks:
+        notifications:
+          "{$request.body#/sink}":
+            post:
+              summary: "notifications callback"
+              description: |-
+                Important: this endpoint is to be implemented by the API
+                consumer. The webrtc-events server will call this endpoint
+                whenever a webrtc-events event occurs. `operationId` value will
+                have to be replaced accordingly with WG API specific semantic.
+              operationId: createNotificationChannelSubscription
+              parameters:
+                - $ref: "#/components/parameters/x-correlator"
+              requestBody:
+                required: true
+                content:
+                  application/cloudevents+json:
+                    schema:
+                      $ref: "#/components/schemas/CloudEvent"
+              responses:
+                "204":
+                  description: Successful notification
+                  headers:
+                    x-correlator:
+                      $ref: "#/components/headers/x-correlator"
+                "400":
+                  $ref: "#/components/responses/Generic400"
+                "401":
+                  $ref: "#/components/responses/Generic401"
+                "403":
+                  $ref: "#/components/responses/Generic403"
+                "410":
+                  $ref: "#/components/responses/Generic410"
+                "429":
+                  $ref: "#/components/responses/Generic429"
+              security:
+                - {}
+                - notificationsBearerAuth: []
+
+      responses:
+        "201":
+          description: Created
+          headers:
+            x-correlator:
+              $ref: "#/components/headers/x-correlator"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        "202":
+          description: Request accepted to be processed. It applies for async creation process.
+          headers:
+            x-correlator:
+              $ref: "#/components/headers/x-correlator"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionAsync"
+        "400":
+          $ref: "#/components/responses/CreateSubscriptionBadRequest400"
+        "401":
+          $ref: "#/components/responses/Generic401"
+        "403":
+          $ref: "#/components/responses/SubscriptionPermissionDenied403"
+        "409":
+          $ref: "#/components/responses/Generic409"
+        "422":
+          $ref: "#/components/responses/CreateSubscriptionUnprocessableEntity422"
+        "429":
+          $ref: "#/components/responses/Generic429"
+
+
+          
   /subscriptions/{subscriptionId}:
     get:
       tags:
@@ -487,6 +583,41 @@ components:
         mapping:
           HTTP: "#/components/schemas/HTTPSubscriptionRequest"
 
+    SessionSpecificSubscriptionRequest:
+      description: The request for creating a event-type event subscription
+      type: object
+      required:
+        - sink
+        - protocol
+        - config
+        - types
+      properties:
+        protocol:
+          $ref: "#/components/schemas/Protocol"
+        sink:
+          type: string
+          format: uri
+          description: The address to which events shall be delivered using the selected protocol.
+          example: "https://endpoint.example.com/sink"
+        sinkCredential:
+          $ref: "#/components/schemas/SinkCredential"
+        types:
+          description: |-
+            Camara Event types eligible to be delivered by this subscription.
+            Note: for the Commonalities meta-release v0.4 we enforce to have only event type per subscription
+            then for following meta-release use of array MUST be decided at API project level.
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            $ref: "#/components/schemas/SessionSpecificSubscriptionEventTypeNotification"
+        config:
+          $ref: "#/components/schemas/Config"
+      discriminator:
+        propertyName: protocol
+        mapping:
+          HTTP: "#/components/schemas/HTTPSubscriptionRequest"
+
     Config:
       description: |-
         Implementation-specific configuration parameters needed by the subscription manager for acquiring
@@ -576,16 +707,9 @@ components:
     WebrtcSubscriptionDetail:
       description: |-
         The detail of the requested event subscription.
-        - org.camaraproject.webrtc-events.v0.session-invitation requires a
-          valid `registrationId` obtained via registration endpoint.
-        - org.camaraproject.webrtc-events.v0.session-status requires both, a
-          valid `registrationId` obtained via registration endpoint and a valid
-          `sessionId` obtained via session-invitation event or via CallHandling
-          API
       type: object
       required:
         - deviceId
-        - registrationId
       properties:
         deviceId:
           type: string
@@ -594,47 +718,44 @@ components:
             The device-id of the client in UUID format. A unique identifier for
             the physical device where a registration is initiated. Generated
             by the WebRTC application, and consistent within the same device.
-        sessionId:
-          type: string
-          example: 0AEE1B58BAEEDA3EABA42B32EBB3DFE07E9CFF402EAF9EED8EFAAF209EE52FD0BECC5B7CDE645F50DE7D
-          description: |-
-            The media session ID created by the network.
-            The sessionID will identify a unique session between the network and the device client.
-            It will be included on the events generated.
-        registrationId:
-          type: string
-          example: xsmcaum3z4zw4l0cu4w115m0
-          description: |-
-            The registration session ID created by the network.
-            Obtained via registration API.
 
     SubscriptionEventTypeNotification:
       type: string
       description: |-
         event-type - Event triggered when an event-type event occurred
+        - `org.camaraproject.webrtc-events.v0.call-events`
+          - Events triggered for any call event (e.g. incoming session, media session related)
+
+        `subscription-ends` is not supported for subscription. Sent by default
+      enum:
+        - org.camaraproject.webrtc-events.v0.call-events
+
+    SessionSpecificSubscriptionEventTypeNotification:
+      type: string
+      description: |-
+        event-type - Event triggered when an event-type event occurred
         - `org.camaraproject.webrtc-events.v0.session-status`
-          - Events triggered for any media session related event (e.g. far end new media endpoints)
-        - `org.camaraproject.webrtc-events.v0.session-invitation`
-          - Events triggered for any media endpoint registration event (e.g. incoming session)
+          - Events triggered for any state changes related to the specific media session identified 
+            by the provided mediaSessionId.
 
         `subscription-ends` is not supported for subscription. Sent by default
       enum:
         - org.camaraproject.webrtc-events.v0.session-status
-        - org.camaraproject.webrtc-events.v0.session-invitation
 
     EventTypeNotification:
       type: string
       description: |-
         event-type - Event triggered when an event-type event occurred
         - `org.camaraproject.webrtc-events.v0.session-status`
-          - Events triggered for any media session related event (e.g. far end new media endpoints)
-        - `org.camaraproject.webrtc-events.v0.session-invitation`
-          - Events triggered for any media endpoint registration event (e.g. incoming session)
+          - Events triggered for any state changes related to the specific media session identified 
+            by the provided mediaSessionId.
+        - `org.camaraproject.webrtc-events.v0.call-events`
+          - Events triggered for any call event (e.g. incoming session, media session related)
         - `org.camaraproject.webrtc-events.v0.subscription-ends`
           - Event triggered when the subscription ends
       enum:
         - org.camaraproject.webrtc-events.v0.session-status
-        - org.camaraproject.webrtc-events.v0.session-invitation
+        - org.camaraproject.webrtc-events.v0.call-events
         - org.camaraproject.webrtc-events.v0.subscription-ends
 
     Subscription:
@@ -753,7 +874,7 @@ components:
       discriminator:
         propertyName: "type"
         mapping:
-          org.camaraproject.webrtc-events.v0.session-invitation: "#/components/schemas/EventSessionInvitation"
+          org.camaraproject.webrtc-events.v0.call-events: "#/components/schemas/EventSessionInvitation"
           org.camaraproject.webrtc-events.v0.session-status: "#/components/schemas/EventSessionStatus"
           org.camaraproject.webrtc-events.v0.subscription-ends: "#/components/schemas/EventSubscriptionEnds"
 
@@ -782,7 +903,7 @@ components:
     ############################################
     EventSessionInvitation:
       description: |-
-        A `org.camaraproject.webrtc-events.v0.session-invitation` event includes an specific type of session
+        A `org.camaraproject.webrtc-events.v0.call-events` event includes an specific type of session
         update for new requested sessions. It is emitted when the endpoint is associated with a valid
         registration and the endpoint is susbcribed to recive new incoming calls.
 
@@ -802,7 +923,8 @@ components:
     EventSessionStatus:
       description: |-
         A `org.camaraproject.webrtc-events.v0.session-status` event includes the session updates provided by
-        the server. This will include actions form the endpoint and the server (far end).
+        the server. This includes signaling updates such as Ringing, InProgress, Connected, Hold, Cancel, 
+        and Ended.
 
         In general terms, it is received each time that an event happens within the session, and include
         all relevant info about the session update.
@@ -1375,11 +1497,10 @@ components:
         protocol: HTTP
         sink: https://notificationServer.opentelco.com
         types:
-          - org.camaraproject.webrtc-events.v0.session-invitation
+          - org.camaraproject.webrtc-events.v0.call-events
         config:
           subscriptionDetail:
             deviceId: "1qazxsw23edc"
-            registrationId: "xsmcaum3z4zw4l0cu4w115m0"
           initialEvent: true
           subscriptionMaxEvents: 50
           subscriptionExpireTime: "2024-11-17T13:18:23.682Z"
@@ -1422,7 +1543,7 @@ components:
       value:
         id: "VzYQCOClM6Kc7Xmyq7mP58Jx"
         source: https://notificationServer.opentelco.com
-        type: org.camaraproject.webrtc-events.v0.session-invitation
+        type: org.camaraproject.webrtc-events.v0.call-events
         specversion: "1.0"
         datacontenttype: application/json
         time: 2024-11-05T05:40:23.682Z
