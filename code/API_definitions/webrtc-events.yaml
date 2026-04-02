@@ -501,6 +501,7 @@ components:
             not supported, a 422 MULTIEVENT_SUBSCRIPTION_NOT_SUPPORTED error will be returned.
           type: array
           minItems: 1
+          maxItems: 3
           items:
             $ref: "#/components/schemas/SubscriptionEventType"
         config:
