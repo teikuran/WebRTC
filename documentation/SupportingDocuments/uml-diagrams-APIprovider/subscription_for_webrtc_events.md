@@ -3,17 +3,66 @@
 This part of the call flow covers subscribing, unsubscribing, and updating subscriptions for WebRTC events.
 
 ## 3.1.1. Event Subscriptions
+
 ### 3.1.1.1. Sequence
 
-![fig1](./subscription_for_webrtc_events_fig-1.png)
+```mermaid
+sequenceDiagram
+
+    box Device
+        participant DA as Device<br/>Application
+    end
+
+    box Application Service Provider
+        participant AS as Application<br/>Server
+    end
+
+    box Operator Network
+        participant AUTH as Auth<br/>Server
+        participant WG as WebRTC<br/>Gateway
+        participant TN as Telco<br/>Network
+    end
+
+    box Device
+        participant RE as Remote<br/>Endpoint
+    end
+
+    DA->>AS: [1] Accessing ASP entry point<br/>(incl. AuthN & AuthZ)
+    AS->>DA: [2] Activate Device Application
+    activate DA
+
+    AS->>AUTH: [3] GET /authorize
+
+    AUTH-->>AS: [4] 302 Found<br/>(redirecting user agent)
+
+    Note over DA,AUTH: [5] End user consent (e.g. ICM Auth Code Flow)
+
+    AS->>AUTH: [6] POST /token
+
+    AUTH-->>AS: [7] 200 OK
+
+    AS->>WG: [8] POST /webrtc-events-subscriptions/{apiVersion}/subscriptions
+    
+    WG->>AUTH: [9] POST /token/introspection
+
+    AUTH-->>WG: [10] 200 OK
+
+    WG-->>AS: [11] 201 Created
+    activate WG
+
+    deactivate DA
+    deactivate WG
+```
 
 ### 3.1.1.2. Example messages
+
 #### [3] GET /authorize
-```
+
+```http
 GET /authorize?response_type=code
     &client_id=asp-webrtc-app-001
     &redirect_uri=https%3A%2F%2Fasp.example.com%2Fcallback
-    &scope=openid%20webrtc-events%3Aorg.camaraproject.webrtc-events.v0.session-invitation%3Acreate%20webrtc-events%3Aorg.camaraproject.webrtc-events.v0.session-status%3Acreate%20webrtc-events%3Aorg.camaraproject.webrtc-events.v0.registration-ends%3Acreate
+    &scope=openid%20webrtc-events-subscriptions%3Aorg.camaraproject.webrtc-events-subscriptions.v0.session-invitation%3Acreate%20webrtc-events-subscriptions%3Aorg.camaraproject.webrtc-events-subscriptions.v0.session-status%3Acreate%20webrtc-events-subscriptions%3Aorg.camaraproject.webrtc-events-subscriptions.v0.registration-ends%3Acreate
     &state=af0ifjsldkj
     &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
     &code_challenge_method=S256 HTTP/1.1
@@ -21,13 +70,15 @@ Host: auth.operator.com
 ```
 
 #### [4] 302 Found
-```
+
+```http
 HTTP/1.1 302 Found
 Location: https://asp.example.com/callback?code=SplxlOBeZQQYbYS6WxSbIA&state=af0ifjsldkj
 ```
 
 #### [6] POST /token
-```
+
+```http
 POST /token HTTP/1.1
 Host: auth.operator.com
 Content-Type: application/x-www-form-urlencoded
@@ -39,13 +90,14 @@ grant_type=authorization_code
 ```
 
 #### [7] 200 OK
-```
+
+```http
 HTTP/1.1 200 OK
 Content-Type: application/json
 Cache-Control: no-store
 
 {
-  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F1dGgub3BlcmF0b3IuY29tIiwic3ViIjoiKzEyMzQ1Njc4OTAiLCJhdWQiOiJhc3Atd2VicnRjLWFwcC0wMDEiLCJleHAiOjE3MzQyNzI2MDAsImlhdCI6MTczNDI2OTAwMCwic2NvcGUiOiJvcGVuaWQgd2VicnRjLWV2ZW50czpvcmcuY2FtYXJhcHJvamVjdC53ZWJydGMtZXZlbnRzLnYwLnNlc3Npb24taW52aXRhdGlvbjpjcmVhdGUgd2VicnRjLWV2ZW50czpvcmcuY2FtYXJhcHJvamVjdC53ZWJydGMtZXZlbnRzLnYwLnNlc3Npb24tc3RhdHVzOmNyZWF0ZSB3ZWJydGMtZXZlbnRzOm9yZy5jYW1hcmFwcm9qZWN0LndlYnJ0Yy1ldmVudHMudjAucmVnaXN0cmF0aW9uLWVuZHM6Y3JlYXRlIn0.signature",
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F1dGgub3BlcmF0b3IuY29tIiwic3ViIjoiKzEyMzQ1Njc4OTAiLCJhdWQiOiJhc3Atd2VicnRjLWFwcC0wMDEiLCJleHAiOjE3MzQyNzI2MDAsImlhdCI6MTczNDI2OTAwMCwic2NvcGUiOiJvcGVuaWQgd2VicnRjLWV2ZW50cy1zdWJzY3JpcHRpb25zOm9yZy5jYW1hcmFwcm9qZWN0LndlYnJ0Yy1ldmVudHMtc3Vic2NyaXB0aW9ucy52MC5zZXNzaW9uLWludml0YXRpb246Y3JlYXRlIHdlYnJ0Yy1ldmVudHMtc3Vic2NyaXB0aW9uczpvcmcuY2FtYXJhcHJvamVjdC53ZWJydGMtZXZlbnRzLXN1YnNjcmlwdGlvbnMudjAuc2Vzc2lvbi1zdGF0dXM6Y3JlYXRlIHdlYnJ0Yy1ldmVudHMtc3Vic2NyaXB0aW9uczpvcmcuY2FtYXJhcHJvamVjdC53ZWJydGMtZXZlbnRzLXN1YnNjcmlwdGlvbnMudjAucmVnaXN0cmF0aW9uLWVuZHM6Y3JlYXRlIn0.signature",
   "token_type": "Bearer",
   "expires_in": 3600,
   "refresh_token": "tGzv3JOkF0XG5Qx2TlKWIA",
@@ -53,9 +105,10 @@ Cache-Control: no-store
 }
 ```
 
-#### [8] POST /webrtc-events-suscription/{apiVersion}/subscriptions
-```
-POST /webrtc-events/v0.2/subscriptions HTTP/1.1
+#### [8] POST /webrtc-events-subscriptions/{apiVersion}/subscriptions
+
+```http
+POST /webrtc-events-subscriptions/{apiVersion}/subscriptions HTTP/1.1
 Host: api.example.com
 Content-Type: application/json
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
@@ -71,9 +124,9 @@ x-correlator: b4333c46-49c0-4f62-80d7-f0ef930f1c46
     "accessTokenType": "bearer"
   },
   "types": [
-    "org.camaraproject.webrtc-events.v0.session-invitation",
-    "org.camaraproject.webrtc-events.v0.session-status",
-    "org.camaraproject.webrtc-events.v0.registration-ends"
+    "org.camaraproject.webrtc-events-subscriptions.v0.session-invitation",
+    "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
+    "org.camaraproject.webrtc-events-subscriptions.v0.registration-ends"
   ],
   "config": {
     "subscriptionDetail": {
@@ -84,42 +137,9 @@ x-correlator: b4333c46-49c0-4f62-80d7-f0ef930f1c46
 }
 ```
 
-> **ISSUE** (UnderDiscussion)
-> 
-> Related Issue: #135
->
-> Related PR: #NN
->
-> Per the updated CAMARA-API-Event-Subscription-and-Notification-Guide.md, event subscriptions (`session-invitation`, `session-status`, `registration-ends`) are consolidated into a single request using the types array to reduce transactions. 
->
-> This consolidated subscription pattern should be reflected in the webrtc-events.yaml examples.
-
-> **ISSUE** (UnderDiscussion)
-> 
-> Related Issue: #76
->
-> Related PR: #NN
->
-> The following fields (derived from CAMARA-API-Event-Subscription-and-Notification-Guide) are omitted as they are not applicable to WebRTC events:
-> - `subscriptionMaxEvents`: The number of events generated by the WebRTC API cannot be predicted in typical use cases. For resource lifecycle management, `subscriptionExpireTime` is the recommended approach.
-> - `initialEvent`: None of the WebRTC events (`session-status`, `session-invitation`, `registration-ends`) are triggered at the event subscription.  
->
-> Informational descriptions for above fields need to be added in webrtc-events.yaml.
-
-> **ISSUE** (UnderDiscussion)
-> 
-> Related Issue: #136
->
-> Related PR: #NN
->
-> The webrtc-events.yaml states that `HTTPSubscriptionRequest` and `HTTPSubscriptionResponse` schemas are applied when the `proto` field value is "HTTP", but the current examples do not reflect those schemas.
->
-> It should be clarified whether to:
-> - Update the examples to conform to the specification, or
-> - Remove the schemas above.
-
 #### [11] 201 Created
-```
+
+```http
 HTTP/1.1 201 Created
 Content-Type: application/json
 x-correlator: b4333c46-49c0-4f62-80d7-f0ef930f1c46
@@ -128,9 +148,9 @@ x-correlator: b4333c46-49c0-4f62-80d7-f0ef930f1c46
   "protocol": "HTTP",
   "sink": "https://notificationServer.example.com/webhooks/webrtc",
   "types": [
-    "org.camaraproject.webrtc-events.v0.session-invitation",
-    "org.camaraproject.webrtc-events.v0.session-status",
-    "org.camaraproject.webrtc-events.v0.registration-ends"
+    "org.camaraproject.webrtc-events-subscriptions.v0.session-invitation",
+    "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
+    "org.camaraproject.webrtc-events-subscriptions.v0.registration-ends"
   ],
   "config": {
     "subscriptionDetail": {
@@ -146,14 +166,65 @@ x-correlator: b4333c46-49c0-4f62-80d7-f0ef930f1c46
 ```
 
 ## 3.1.2. Refresh event subscriptions
+
 ### 3.1.2.1. Sequence
 
-![fig1](./subscription_for_webrtc_events_fig-2.png)
+```mermaid
+sequenceDiagram
+
+    box Device
+        participant DA as Device<br/>Application
+    end
+
+    box Application Service Provider
+        participant AS as Application<br/>Server
+    end
+
+    box Operator Network
+        participant AUTH as Auth<br/>Server
+        participant WG as WebRTC<br/>Gateway
+        participant TN as Telco<br/>Network
+    end
+
+    box Device
+        participant RE as Remote<br/>Endpoint
+    end
+
+    activate DA
+    activate WG
+
+    DA->>AS: [12] Event subscription update request
+
+    AS->>AUTH: [13] GET /authorize
+
+    AUTH-->>AS: [14] 302 Found<br/>(redirecting user agent)
+
+    Note over DA,AUTH: [15] End user consent (e.g. ICM Auth Code Flow)
+
+    AS->>AUTH: [16] POST /token
+
+    AUTH-->>AS: [17] 200 OK
+
+    AS->>WG: [18] PUT /webrtc-events-subscriptions/{apiVersion}/subscriptions/{subscriptionId}
+
+    WG->>AUTH: [19] POST /token/introspection
+
+    AUTH-->>WG: [20] 200 OK
+
+    WG-->>AS: [21] 200 OK
+
+    AS->>DA: [22] Event subscription update result
+
+    deactivate DA
+    deactivate WG
+```
 
 ### 3.1.2.2. Example messages
-#### [18] PUT /webrtc-events-suscription/{apiVersion}/subscriptions/{subscriptionId}
-```
-PUT /webrtc-events/v0.2/subscriptions/sub-a1b2c3d4-e5f6-7890-abcd-ef1234567890 HTTP/1.1
+
+#### [18] PUT /webrtc-events-subscriptions/{apiVersion}/subscriptions/{subscriptionId}
+
+```http
+PUT /webrtc-events-subscriptions/{apiVersion}/subscriptions/sub-a1b2c3d4-e5f6-7890-abcd-ef1234567890 HTTP/1.1
 Host: api.example.com
 Content-Type: application/json
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
@@ -174,18 +245,10 @@ x-correlator: f8e7d6c5-b4a3-2190-fedc-ba0987654321
   }
 }
 ```
-> **ISSUE** (NotAddressed)
-> 
-> Related Issue: #78
->
-> Related PR: #NN
->
-> When a `session-status` event subscription expires, signaling for ongoing calls becomes unavailable. Since media modifications may be initiated by the Remote Endpoint, clients MUST refresh the subscription using PUT before `expiresAt` or `sinkCredential.accessTokenExpiresUtc` is reached, if they have ongoing media sessions.
->
-> The `PUT` method for subscription refresh must be added to the webrtc-events.yaml.
 
 #### [21] 200 OK
-```
+
+```http
 HTTP/1.1 200 OK
 Content-Type: application/json
 x-correlator: f8e7d6c5-b4a3-2190-fedc-ba0987654321
@@ -194,9 +257,9 @@ x-correlator: f8e7d6c5-b4a3-2190-fedc-ba0987654321
   "protocol": "HTTP",
   "sink": "https://asp.example.com/webhooks/webrtc",
   "types": [
-    "org.camaraproject.webrtc-events.v0.session-invitation",
-    "org.camaraproject.webrtc-events.v0.session-status",
-    "org.camaraproject.webrtc-events.v0.registration-ends"
+    "org.camaraproject.webrtc-events-subscriptions.v0.session-invitation",
+    "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
+    "org.camaraproject.webrtc-events-subscriptions.v0.registration-ends"
   ],
   "config": {
     "subscriptionDetail": {
@@ -212,21 +275,78 @@ x-correlator: f8e7d6c5-b4a3-2190-fedc-ba0987654321
 ```
 
 ## 3.1.3. Unsubscribe from events
+
 ### 3.1.3.1. Sequence
 
-![fig3](./subscription_for_webrtc_events_fig-3.png)
+```mermaid
+sequenceDiagram
+
+    box Device
+        participant DA as Device<br/>Application
+    end
+
+    box Application Service Provider
+        participant AS as Application<br/>Server
+    end
+
+    box Operator Network
+        participant AUTH as Auth<br/>Server
+        participant WG as WebRTC<br/>Gateway
+        participant TN as Telco<br/>Network
+    end
+
+    box Device
+        participant RE as Remote<br/>Endpoint
+    end
+
+    activate DA
+    activate WG
+
+    DA->>AS: [23] Event subscription delete request
+
+    AS->>AUTH: [24] GET /authorize
+
+    AUTH-->>AS: [25] 302 Found<br/>(redirecting user agent)
+
+    Note over DA,AUTH: [26] End user consent (e.g. ICM Auth Code Flow)
+
+    AS->>AUTH: [27] POST /token
+
+    AUTH-->>AS: [28] 200 OK
+
+    AS->>WG: [29] DELETE /webrtc-events-subscriptions/{apiVersion}/subscriptions/{subscriptionId}
+
+    WG->>AUTH: [30] POST /token/introspection
+
+    AUTH-->>WG: [31] 200 OK
+
+    WG-->>AS: [32] 202 Accepted
+
+    WG->>AS: [33] POST SINK_URL
+
+    AS->>DA: [34] Event subscription delete result
+
+    AS-->>WG: [35] 204 No Content
+    deactivate WG
+
+    deactivate DA
+
+```
 
 ### 3.1.3.2. Example messages
-#### [29] DELETE /webrtc-events/{apiVersion}/subscriptions/{subscriptionId}
-```
-DELETE /webrtc-events/v0.2/subscriptions/sub-a1b2c3d4-e5f6-7890-abcd-ef1234567890 HTTP/1.1
+
+#### [29] DELETE /webrtc-events-subscriptions/{apiVersion}/subscriptions/{subscriptionId}
+
+```http
+DELETE /webrtc-events-subscriptions/{apiVersion}/subscriptions/sub-a1b2c3d4-e5f6-7890-abcd-ef1234567890 HTTP/1.1
 Host: api.example.com
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 x-correlator: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
 #### [32] 202 Accepted
-```
+
+```http
 HTTP/1.1 202 Accepted
 Content-Type: application/json
 x-correlator: a1b2c3d4-e5f6-7890-abcd-ef1234567890
@@ -237,7 +357,8 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
 #### [33] POST {sink} (callback)
-```
+
+```http
 POST /webhooks/webrtc HTTP/1.1
 Host: asp.example.com
 Content-Type: application/cloudevents+json
@@ -246,8 +367,8 @@ x-correlator: b2c3d4e5-f6a7-8901-bcde-f23456789012
 
 {
   "id": "evt-9a8b7c6d-5e4f-3210-fedc-ba9876543210",
-  "source": "https://api.example.com/webrtc-events/v0.2",
-  "type": "org.camaraproject.webrtc-events.v0.subscription-ended",
+  "source": "https://api.example.com/webrtc-events-subscriptions/{apiVersion}",
+  "type": "org.camaraproject.webrtc-events-subscriptions.v0.subscription-ended",
   "specversion": "1.0",
   "datacontenttype": "application/json",
   "time": "2025-12-15T14:30:00.000Z",
@@ -260,7 +381,8 @@ x-correlator: b2c3d4e5-f6a7-8901-bcde-f23456789012
 ```
 
 #### [35] 204 No Content (callback response)
-```
+
+```http
 HTTP/1.1 204 No Content
 x-correlator: b2c3d4e5-f6a7-8901-bcde-f23456789012
 
