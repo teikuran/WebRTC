@@ -5,15 +5,134 @@ This part of the call flows cover call origination from Application Server as We
 In the call flows, the interface between the WebRTC Gateway and the Telco Network is a SIP-based NNI (Network-to-Network Interface). As such, IMS access-layer procedures (e.g., resource reservation, precondition) are out of scope, while reliable provisional responses (100rel / PRACK) are assumed to be supported on the NNI.
 
 ## 3.3.1. Call origination
+
 ### 3.3.1.1. Call flow
 
-![fig1](./call_origination_and_disconnection_fig-1.png)
+```mermaid
+sequenceDiagram
+
+
+    box Device
+        participant DA as Device<br/>Application
+    end
+
+    box Application Service Provider
+        participant AS as Application<br/>Server
+    end
+
+    box Operator Network
+        participant AUTH as Auth<br/>Server
+        participant WG as WebRTC<br/>Gateway
+        participant TN as Telco<br/>Network
+    end
+
+    box Device
+        participant RE as Remote<br/>Endpoint
+    end
+
+    DA->>AS: [1] Call origination request
+    activate DA
+
+    AS->>AUTH: [2] GET /authorize
+
+    AUTH-->>AS: [3] 302 Found<br/>(redirecting user agent)
+
+    Note over DA,AUTH: [4] End user consent (e.g. ICM Auth Code Flow)
+
+    AS->>AUTH: [5] POST /token
+
+    AUTH-->>AS: [6] 200 OK
+
+    AS->>WG: [7] POST /webrtc-call-handling/{apiVersion}/sessions
+    activate WG
+
+    WG->>AUTH: [8] POST /token/introspection
+
+    AUTH-->>WG: [9] 200 OK
+
+    WG->>TN: [10] SIP INVITE
+    activate TN
+
+    TN->>RE: [11] SIP INVITE
+    activate RE
+
+    RE->>TN: [12] SIP 100 Trying
+
+    TN->>WG: [13] SIP 100 Trying
+
+    WG-->>AS: [14] 201 Created
+
+    AS->>DA: <br/>[15]
+
+    RE->>TN: [16] SIP 183 Session Progress
+
+    TN->>WG: [17] SIP 183 Session Progress
+
+    WG->>AS: [18] POST SINK_URL<br/>status: Ringing
+
+    AS->>DA: <br/>[19]
+
+    AS-->>WG: [20] 204 No Content
+
+    WG->>TN: [21] SIP PRACK
+
+    TN->>RE: [22] SIP PRACK
+
+    RE->>TN: [23] SIP 200 OK (PRA)
+
+    TN->>WG: [24] SIP 200 OK (PRA)
+
+    Note over DA,WG: [25] ICE Connectivity Check
+
+    Note over DA,WG: [26] DTLS Handshake
+
+    Note over DA,RE: [27] Device Application ⇄ WebRTC Gateway: DTLS-SRTP (early media / ring back tone)<br/>[28] WebRTC Gateway ⇄ Remote Endpoint: RTP (early media / ring back tone)
+
+    RE->>TN: [29] SIP 180 Ringing
+
+    TN->>WG: [30] SIP 180 Ringing
+
+    WG->>AS: [31] POST SINK_URL<br/>status: Ringing
+
+    AS->>DA: <br/>[32] 
+
+    AS-->>WG: [33] 204 No Content
+
+    WG->>TN: [34] SIP PRACK
+
+    TN->>RE: [35] SIP PRACK
+    
+    RE->>TN: [36] SIP 200 OK (PRA)
+    
+    TN->>WG: [37] SIP 200 OK (PRA)
+
+    RE->>TN: [38] SIP 200 OK (INV)
+
+    TN->>WG: [39] SIP 200 OK (INV)
+
+    WG->>AS: [40] POST SINK_URL<br/>status: Connected
+
+    AS->>DA: <br/>[41]
+
+    AS-->>WG: [42] 204 No Content
+
+    WG->>TN: [43] SIP ACK
+    TN->>RE: [44] SIP ACK
+
+    Note over DA,RE: [45] Device Application ⇄ WebRTC Gateway: DTLS-SRTP (voice media)<br/>[46] WebRTC Gateway ⇄ Remote Endpoint: RTP (voice media)
+
+    deactivate DA
+    deactivate RE
+    deactivate TN
+    deactivate WG
+```
 
 ### 3.3.1.2. Example messages
 
-#### [7] POST /webrtc-call-handling/v0.3/sessions
+#### [7] POST /webrtc-call-handling/{apiVersion}/sessions
+
 ```http
-POST /webrtc-call-handling/v0.3/sessions HTTP/1.1
+POST /webrtc-call-handling/{apiVersion}/sessions HTTP/1.1
 Host: webrtc-gw.operator.com
 Content-Type: application/json
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
@@ -31,18 +150,8 @@ registrationId: reg-550e8400-e29b-41d4-a716-446655440000
 }
 ```
 
-> **ISSUE** (UnderDiscussion)
-> 
-> Related Issue: #147
->
-> Related PR: #NN
->
-> The current API definition uses a single MediaSessionInformation schema as the message body across multiple operations (POST request/response, GET response, and PUT request/response). However, the set of required properties varies depending on the operation context. This overloading of a single schema reduces clarity and may lead to ambiguity for API consumers regarding which fields are mandatory in each operation.
-> 
-> It is proposed to define distinct schema types corresponding to each operation context (e.g., CreateMediaSessionRequest, CreateMediaSessionResponse, MediaSessionInfo, UpdateMediaSessionRequest, UpdateMediaSessionResponse) in webrtc-callhandling.yaml, and update the $ref references in each operation accordingly.
-
-
 #### [10] SIP INVITE
+
 ```
 INVITE sip:+818000000002@tn.operator.com;user=phone SIP/2.0
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776asdhds
@@ -72,6 +181,7 @@ a=ptime:20
 ```
 
 #### [13] SIP 100 Trying
+
 ```
 SIP/2.0 100 Trying
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776asdhds;received=203.0.113.100
@@ -83,6 +193,7 @@ Content-Length: 0
 ```
 
 #### [14] 201 Created
+
 ```http
 HTTP/1.1 201 Created
 Content-Type: application/json
@@ -102,6 +213,7 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000007
 ```
 
 #### [17] SIP 183 Session Progress
+
 ```
 SIP/2.0 183 Session Progress
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776asdhds;received=203.0.113.100
@@ -129,6 +241,7 @@ a=ptime:20
 ```
 
 #### [18] POST SINK_URL
+
 ```http
 POST /webhooks/webrtc HTTP/1.1
 Host: asp.example.com
@@ -139,7 +252,7 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000016
 {
   "id": "evt-183-f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "source": "https://webrtc-gw.operator.com",
-  "type": "org.camaraproject.webrtc-events.v0.session-status",
+  "type": "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
   "specversion": "1.0",
   "datacontenttype": "application/json",
   "time": "2025-02-05T10:30:01.123Z",
@@ -164,12 +277,14 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000016
 ```
 
 #### [20] 204 No Content
+
 ```http
 HTTP/1.1 204 No Content
 x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000016
 ```
 
 #### [21] SIP PRACK
+
 ```
 PRACK sip:+818000000002@198.51.100.10:5060;transport=tcp SIP/2.0
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776prack1
@@ -183,6 +298,7 @@ Content-Length: 0
 ```
 
 #### [24] SIP 200 OK (PRACK)
+
 ```
 SIP/2.0 200 OK
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776prack1;received=203.0.113.100
@@ -194,6 +310,7 @@ Content-Length: 0
 ```
 
 #### [30] SIP 180 Ringing
+
 ```
 SIP/2.0 180 Ringing
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776asdhds;received=203.0.113.100
@@ -208,6 +325,7 @@ Content-Length: 0
 ```
 
 #### [31] POST SINK_URL
+
 ```http
 POST /webhooks/webrtc HTTP/1.1
 Host: asp.example.com
@@ -218,7 +336,7 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000027
 {
   "id": "evt-180-a8b9c0d1-e2f3-4456-b789-0a1b2c3d4e5f",
   "source": "https://webrtc-gw.operator.com",
-  "type": "org.camaraproject.webrtc-events.v0.session-status",
+  "type": "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
   "specversion": "1.0",
   "datacontenttype": "application/json",
   "time": "2025-02-05T10:30:02.456Z",
@@ -237,12 +355,14 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000027
 ```
 
 #### [33] 204 No Content
+
 ```http
 HTTP/1.1 204 No Content
 x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000027
 ```
 
 #### [34] SIP PRACK
+
 ```
 PRACK sip:+818000000002@198.51.100.10:5060;transport=tcp SIP/2.0
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776prack2
@@ -256,6 +376,7 @@ Content-Length: 0
 ```
 
 #### [37] SIP 200 OK (PRACK)
+
 ```
 SIP/2.0 200 OK
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776prack2;received=203.0.113.100
@@ -267,6 +388,7 @@ Content-Length: 0
 ```
 
 #### [39] SIP 200 OK (INVITE)
+
 ```
 SIP/2.0 200 OK
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776asdhds;received=203.0.113.100
@@ -294,6 +416,7 @@ a=ptime:20
 ```
 
 #### [40] POST SINK_URL
+
 ```http
 POST /webhooks/webrtc HTTP/1.1
 Host: asp.example.com
@@ -304,7 +427,7 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000035
 {
   "id": "evt-200-c4d5e6f7-8901-2345-6789-abcdef012345",
   "source": "https://webrtc-gw.operator.com",
-  "type": "org.camaraproject.webrtc-events.v0.session-status",
+  "type": "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
   "specversion": "1.0",
   "datacontenttype": "application/json",
   "time": "2025-02-05T10:30:05.789Z",
@@ -329,12 +452,14 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000035
 ```
 
 #### [42] 204 No Content
+
 ```http
 HTTP/1.1 204 No Content
 x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000035
 ```
 
 #### [43] SIP ACK
+
 ```
 ACK sip:+818000000002@198.51.100.10:5060;transport=tcp SIP/2.0
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776ack1
@@ -346,34 +471,98 @@ CSeq: 1 ACK
 Content-Length: 0
 ```
 
-
-
-
-
-
-
 ## 3.3.2. Call termination by call originator
+
 ### 3.3.2.1. Sequence
 
-![fig2](./call_origination_and_disconnection_fig-2.png)
+```mermaid
+sequenceDiagram
+
+    box Device
+        participant DA as Device<br/>Application
+    end
+
+    box Application Service Provider
+        participant AS as Application<br/>Server
+    end
+
+    box Operator Network
+        participant AUTH as Auth<br/>Server
+        participant WG as WebRTC<br/>Gateway
+        participant TN as Telco<br/>Network
+    end
+
+    box Device
+        participant RE as Remote<br/>Endpoint
+    end
+
+    activate DA
+    DA->>AS: [47] Call termination request
+   
+    activate WG
+    activate TN
+    activate RE
+
+    AS->>AUTH: [48] GET /authorize
+
+    AUTH-->>AS: [49] 302 Found<br/>(redirecting user agent)
+
+    Note over DA,AUTH: [50] End user consent (e.g. ICM Auth Code Flow)
+
+    AS->>AUTH: [51] POST /token
+
+    AUTH-->>AS: [52] 200 OK
+
+    AS->>WG: [53] DELETE /webrtc-call-handling/{apiVersion}/sessions/{mediaSessionId}
+
+    WG->>AUTH: [54] POST /token/introspection
+
+    AUTH-->>WG: [55] 200 OK
+
+    WG-->>AS: [56] 204 No Content
+
+    WG->>TN: [57] SIP BYE
+
+    TN->>RE: [58] SIP BYE
+
+    RE->>TN: [59] SIP 200 OK (BYE)
+
+    TN->>WG: [60] SIP 200 OK (BYE)
+
+    WG->>AS: [61] POST SINK_URL<br/>status: Terminated
+
+    deactivate WG
+
+    AS->>DA: [62]
+
+    deactivate DA
+
+    AS-->>WG: [63] 204 No Content
+
+    deactivate RE
+    deactivate TN
+```
 
 ### 3.3.2.2. Example messages
 
-#### [53] DELETE /webrtc-call-handling/v0.3/sessions/{mediaSessionId}
+#### [53] DELETE /webrtc-call-handling/{apiVersion}/sessions/{mediaSessionId}
+
 ```http
-DELETE /webrtc-call-handling/v0.3/sessions/0AEE1B58BAEEDA3EABA42B32EBB3DFE07E9CFF402EAF9EED8EF HTTP/1.1
+DELETE /webrtc-call-handling/{apiVersion}/sessions/0AEE1B58BAEEDA3EABA42B32EBB3DFE07E9CFF402EAF9EED8EF HTTP/1.1
 Host: webrtc-gw.operator.com
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000051
 ```
 
 #### [56] 204 No Content
+
 ```http
 HTTP/1.1 204 No Content
 x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000051
 ```
 
 #### [57] SIP BYE
+
 ```
 BYE sip:+818000000002@198.51.100.10:5060;transport=tcp SIP/2.0
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776bye1
@@ -386,6 +575,7 @@ Content-Length: 0
 ```
 
 #### [60] SIP 200 OK (BYE)
+
 ```
 SIP/2.0 200 OK
 Via: SIP/2.0/TCP webrtc-gw.operator.com:5060;branch=z9hG4bK776bye1;received=203.0.113.100
@@ -397,6 +587,7 @@ Content-Length: 0
 ```
 
 #### [61] POST SINK_URL
+
 ```http
 POST /webhooks/webrtc HTTP/1.1
 Host: asp.example.com
@@ -407,7 +598,7 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000059
 {
   "id": "evt-bye-d5e6f7a8-b901-2345-6789-abcdef012345",
   "source": "https://webrtc-gw.operator.com",
-  "type": "org.camaraproject.webrtc-events.v0.session-status",
+  "type": "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
   "specversion": "1.0",
   "datacontenttype": "application/json",
   "time": "2025-02-05T10:35:00.123Z",
@@ -426,19 +617,66 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000059
 ```
 
 #### [63] 204 No Content
+
 ```http
 HTTP/1.1 204 No Content
 x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000059
 ```
 
 ## 3.3.3. Call termination by call receiver
+
 ### 3.3.3.1. Sequence
 
-![fig3](./call_origination_and_disconnection_fig-3.png)
+```mermaid
+sequenceDiagram
+
+    box Device
+        participant DA as Device<br/>Application
+    end
+
+    box Application Service Provider
+        participant AS as Application<br/>Server
+    end
+
+    box Operator Network
+        participant AUTH as Auth<br/>Server
+        participant WG as WebRTC<br/>Gateway
+        participant TN as Telco<br/>Network
+    end
+
+    box Device
+        participant RE as Remote<br/>Endpoint
+    end
+
+    activate DA
+    activate WG
+    activate TN
+    activate RE
+
+    RE->>TN: [47] SIP BYE
+
+    TN->>WG: [48] SIP BYE
+
+    WG->>TN: [49] SIP 200 OK (BYE)
+
+    TN->>RE: [50] SIP 200 OK (BYE)
+    deactivate RE
+    deactivate TN
+
+    WG->>AS: [51] POST SINK_URL<br/>status: Terminated
+
+    AS->>DA: <br/>[52]
+    deactivate DA
+
+    AS-->>WG: [53] 204 No Content
+    deactivate WG
+
+```
 
 ### 3.3.3.2. Example messages
 
 #### [48] SIP BYE
+
 ```
 BYE sip:webrtc-gw.operator.com:5060;transport=tcp SIP/2.0
 Via: SIP/2.0/TCP 198.51.100.10:5060;branch=z9hG4bK889bye1
@@ -451,6 +689,7 @@ Content-Length: 0
 ```
 
 #### [49] SIP 200 OK (BYE)
+
 ```
 SIP/2.0 200 OK
 Via: SIP/2.0/TCP 198.51.100.10:5060;branch=z9hG4bK889bye1;received=198.51.100.10
@@ -462,6 +701,7 @@ Content-Length: 0
 ```
 
 #### [51] POST SINK_URL
+
 ```http
 POST /webhooks/webrtc HTTP/1.1
 Host: asp.example.com
@@ -472,7 +712,7 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000049
 {
   "id": "evt-bye-e6f7a8b9-c012-3456-7890-abcdef123456",
   "source": "https://webrtc-gw.operator.com",
-  "type": "org.camaraproject.webrtc-events.v0.session-status",
+  "type": "org.camaraproject.webrtc-events-subscriptions.v0.session-status",
   "specversion": "1.0",
   "datacontenttype": "application/json",
   "time": "2025-02-05T10:35:00.456Z",
@@ -491,16 +731,8 @@ x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000049
 ```
 
 #### [53] 204 No Content
+
 ```http
 HTTP/1.1 204 No Content
 x-correlator: a1b2c3d4-e5f6-7890-abcd-000000000049
 ```
-
-
-
-
-
-
-
-
-
